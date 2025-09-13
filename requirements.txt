@@ -1,0 +1,6 @@
+# Runtime dependencies for Social Media Generator
+# Tested with Python 3.10
+
+streamlit>=1.31.0,<2.0.0
+openai>=1.40.0,<2.0.0
+requests>=2.31.0,<3.0.0

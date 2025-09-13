@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.env
+.venv/
+venv/
+
+# Streamlit
+.streamlit/secrets.toml
+.streamlit/*.log
+
+# OS / tooling
+.DS_Store
+Thumbs.db
+*.swp
+*.tmp
+
+# Conda
+*.conda
+*.lock
