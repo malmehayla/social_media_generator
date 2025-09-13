@@ -2,7 +2,7 @@
 # Social Media Generator – Default: Ollama (free/local), Toggle: OpenAI (paid)
 # Platforms: Twitter/X, Instagram, LinkedIn, TikTok, Facebook
 # Content type: Caption/Post; adjustable target words with 80–100% enforcement (refine pass)
-# OpenAI: dropdown of available models (gpt-5 removed)
+# OpenAI: dropdown of available models
 # Ollama: list installed models, refresh list, and pull models from the UI
 
 import json
@@ -46,7 +46,7 @@ RECOMMENDED_WORDS = {
     }
 }
 
-# Fallback OpenAI models (no gpt-5)
+# Fallback OpenAI models
 FALLBACK_OPENAI_MODELS = [
     "gpt-4o-mini",
     "gpt-4o",
@@ -365,12 +365,9 @@ def is_probably_chat_model(model_id: str) -> bool:
         return False
     return any(tok in nid for tok in ["gpt", "o3", "4o", "4.1", "3.5"])
 
-def filter_out_disallowed(models: List[str]) -> List[str]:
-    # Ensure gpt-5 never appears
-    return [m for m in models if not m.lower().startswith("gpt-5")]
 
 def fetch_openai_chat_models(api_key: str) -> List[str]:
-    """Fetch OpenAI models and filter to likely chat-capable ones, excluding gpt-5."""
+    """Fetch OpenAI models and filter to likely chat-capable ones"""
     try:
         client = OpenAI(api_key=api_key, timeout=30)
         res = client.models.list()
@@ -379,7 +376,6 @@ def fetch_openai_chat_models(api_key: str) -> List[str]:
         favorites = [m for m in FALLBACK_OPENAI_MODELS if m in chat_ids]
         others = sorted(set(chat_ids) - set(favorites))
         ordered = favorites + others
-        ordered = filter_out_disallowed(ordered)
         return ordered or FALLBACK_OPENAI_MODELS
     except Exception:
         return FALLBACK_OPENAI_MODELS
@@ -565,7 +561,7 @@ with st.sidebar:
             key="openai_key",
         )
 
-        # OpenAI Model Selector (gpt-5 excluded)
+        # OpenAI Model Selector
         def fetch_openai_chat_models(api_key_in: str) -> List[str]:
             try:
                 client = OpenAI(api_key=api_key_in, timeout=30)
