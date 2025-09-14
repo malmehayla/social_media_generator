@@ -796,7 +796,7 @@ with st.sidebar:
     st.caption(
         "Default provider: Ollama (local). Toggle 'Use OpenAI (paid)' to switch. "
         "App enforces an 80–100% word range (except X’s 280-char limit). "
-        "Use Refresh to update local model list; Pull to install new models."
-        "Only OpenAI will work for streamlit deployed app"
+        "Use Refresh to update local model list; Pull to install new models. "
+        "Only OpenAI will work for streamlit deployed app. "
         "Built by **Mohamed Almehayla**"
     )
