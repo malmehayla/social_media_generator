@@ -501,6 +501,7 @@ def generate_captions_ollama(description: str, platform: str, tone: str, content
 # -------------------------------
 st.set_page_config(page_title="Social Media Generator", page_icon="📝", layout="wide")
 st.title("📝 Social Media Generator")
+st.caption("By: **Mohamed Almehayla**")
 
 if "busy" not in st.session_state:
     st.session_state["busy"] = False
@@ -796,4 +797,6 @@ with st.sidebar:
         "Default provider: Ollama (local). Toggle 'Use OpenAI (paid)' to switch. "
         "App enforces an 80–100% word range (except X’s 280-char limit). "
         "Use Refresh to update local model list; Pull to install new models."
+        "Only OpenAI will work for streamlit deployed app"
+        "Built by **Mohamed Almehayla**"
     )
