@@ -1,15 +1,15 @@
 # app.py
+# Author: Mohamed Almehayla
 # Social Media Generator – Default: Ollama (free/local), Toggle: OpenAI (paid)
 # Platforms: Twitter/X, Instagram, LinkedIn, TikTok, Facebook
 # Content type: Caption/Post; adjustable target words with 80–100% enforcement (refine pass)
-# OpenAI: dropdown of available models
+# OpenAI: dropdown of available models (pulled from your key when present; excludes gpt-5)
 # Ollama: list installed models, refresh list, and pull models from the UI
 
+import os
 import json
-import time
 import re
 import math
-import random
 from typing import List, Dict, Tuple, Optional
 
 import requests
@@ -17,6 +17,7 @@ from requests.exceptions import RequestException
 
 import streamlit as st
 import streamlit.components.v1 as components
+from streamlit.errors import StreamlitSecretNotFoundError  # <-- precise exception
 from openai import OpenAI
 from openai import APIError, AuthenticationError, RateLimitError
 
@@ -28,48 +29,103 @@ CONTENT_TYPES = ["Caption", "Post"]
 TONES = ["None", "fun", "professional", "inspirational"]
 TWITTER_MAX = 280
 
-# Recommended word targets by (platform, content_type)
 RECOMMENDED_WORDS = {
-    "Caption": {
-        "Twitter/X": 18,
-        "Instagram": 30,
-        "LinkedIn": 35,
-        "TikTok": 18,
-        "Facebook": 30,
-    },
-    "Post": {
-        "Twitter/X": 40,   # must fit 280 chars; keep concise
-        "Instagram": 400,  # long micro-post
-        "LinkedIn": 450,   # long-form (>=400 words)
-        "TikTok": 120,     # longer than caption, skimmable
-        "Facebook": 450,   # long-form (>=400 words)
-    }
+    "Caption": {"Twitter/X": 18, "Instagram": 30, "LinkedIn": 35, "TikTok": 18, "Facebook": 30},
+    "Post": {"Twitter/X": 40, "Instagram": 400, "LinkedIn": 450, "TikTok": 120, "Facebook": 450},
 }
 
-# Fallback OpenAI models
-FALLBACK_OPENAI_MODELS = [
-    "gpt-4o-mini",
-    "gpt-4o",
-    "gpt-4.1-mini",
-    "gpt-4.1",
-    "o3-mini",
-]
-
+FALLBACK_OPENAI_MODELS = ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "gpt-4.1", "o3-mini"]
 DEFAULT_OLLAMA_MODEL = "llama3.2:3b"
 
+
 # -------------------------------
-# Prompt
+# Secrets & Key Resolution (ROCK-SOLID)
 # -------------------------------
-def get_prompt(
-    description: str,
-    platform: str,
-    tone: Optional[str],
-    content_type: str,
-    word_target: int,
-    fenced: bool = False,
-    min_ratio: float = 0.8
-) -> str:
-    """Build the prompt. If fenced=True, require JSON inside ```json ...``` (helps local models)."""
+def _mask_key(k: Optional[str]) -> str:
+    if not k:
+        return "(none)"
+    k = str(k)
+    if len(k) <= 10:
+        return "***"
+    return f"{k[:4]}***{k[-4:]}"
+
+
+def _read_from_secrets() -> Tuple[str, str]:
+    """
+    Safely read from Streamlit secrets in multiple shapes without ever crashing
+    if .streamlit/secrets.toml is missing. Returns (key, source_str).
+    Supported shapes:
+      openai_api_key = "sk-..."
+      OPENAI_API_KEY = "sk-..."
+      [openai] api_key = "sk-..."
+      [openai] OPENAI_API_KEY = "sk-..."
+    """
+    # Any attempt to access st.secrets keys will trigger parsing; guard each access.
+    try:
+        s = st.secrets  # obtaining the proxy is fine; parsing happens on access
+    except Exception:
+        return "", "secrets:unavailable"
+
+    # top-level keys
+    for name in ("openai_api_key", "OPENAI_API_KEY"):
+        try:
+            v = s.get(name)  # this may raise StreamlitSecretNotFoundError if secrets file missing
+        except StreamlitSecretNotFoundError:
+            return "", "secrets:not_found"
+        except Exception:
+            return "", "secrets:unavailable"
+        if isinstance(v, str) and v.strip():
+            return v.strip(), f"secrets:{name}"
+
+    # nested sections
+    for sect in ("openai", "OpenAI", "OPENAI"):
+        try:
+            sec = s[sect]  # bracket access can also raise
+        except StreamlitSecretNotFoundError:
+            return "", "secrets:not_found"
+        except Exception:
+            sec = None
+        if isinstance(sec, dict):
+            for name in ("api_key", "API_KEY", "openai_api_key", "OPENAI_API_KEY"):
+                v = sec.get(name)
+                if isinstance(v, str) and v.strip():
+                    return v.strip(), f"secrets:{sect}.{name}"
+
+    # secrets exists but no matching keys
+    return "", "secrets:not_found"
+
+
+def _read_from_env() -> Tuple[str, str]:
+    for name in ("OPENAI_API_KEY", "openai_api_key"):
+        v = os.getenv(name, "").strip()
+        if v:
+            return v, f"env:{name}"
+    return "", "env:not_found"
+
+
+def resolve_openai_key() -> Tuple[str, str]:
+    """
+    Deterministic resolution order:
+      1) Streamlit secrets (multiple shapes)
+      2) Environment variables
+      3) Empty string if not found
+    Returns (key, source_string)
+    """
+    k, src = _read_from_secrets()
+    if k:
+        return k, src
+    k, src = _read_from_env()
+    if k:
+        return k, src
+    return "", "none"
+
+
+# -------------------------------
+# Prompt Builders
+# -------------------------------
+def get_prompt(description: str, platform: str, tone: Optional[str],
+               content_type: str, word_target: int, fenced: bool = False,
+               min_ratio: float = 0.8) -> str:
     tone_text = tone if tone and tone.lower() != "none" else "neutral"
     min_words = max(1, math.floor(min_ratio * word_target))
     few_shots = """
@@ -149,16 +205,9 @@ Output format requirements (MANDATORY):
         base += "\nDo not include any backticks, code fences, or extra commentary. Return exactly 7 items."
     return base
 
-def get_refine_prompt(
-    items: List[str],
-    description: str,
-    platform: str,
-    tone: Optional[str],
-    content_type: str,
-    min_words: int,
-    max_words: int,
-    fenced: bool = False
-) -> str:
+
+def get_refine_prompt(items: List[str], description: str, platform: str, tone: Optional[str],
+                      content_type: str, min_words: int, max_words: int, fenced: bool = False) -> str:
     tone_text = tone if tone and tone.lower() != "none" else "neutral"
     joined = "\n".join([f"{i+1}. {it}" for i, it in enumerate(items)])
     base = f"""
@@ -188,6 +237,7 @@ Return ONLY JSON:
     if fenced:
         base += "\nWrap the JSON ONLY in triple backticks like:\n```json\n{ ... }\n```"
     return base
+
 
 # -------------------------------
 # JSON Repair / Parsing Helpers
@@ -255,9 +305,7 @@ def _normalize_captions(parsed: dict) -> List[Dict[str, str]]:
 def word_count(s: str) -> int:
     return len(re.findall(r"\S+", s))
 
-def _enforce_platform_rules(
-    items: List[Dict[str, str]], platform: str
-) -> Tuple[List[Dict[str, str]], List[str]]:
+def _enforce_platform_rules(items: List[Dict[str, str]], platform: str) -> Tuple[List[Dict[str, str]], List[str]]:
     warnings: List[str] = []
     processed: List[Dict[str, str]] = []
     for cap in items:
@@ -272,13 +320,8 @@ def _enforce_platform_rules(
         processed.append(meta if "text" in meta else {"text": text, "char_count": len(text)})
     return processed, list(set(warnings))
 
-def _enforce_word_bounds(
-    items: List[Dict[str, str]],
-    min_words: int,
-    max_words: int,
-    platform: str
-) -> Tuple[List[Dict[str, str]], List[str], List[int]]:
-    """Trim if > max_words; flag if < min_words (except for Twitter)."""
+def _enforce_word_bounds(items: List[Dict[str, str]], min_words: int, max_words: int, platform: str
+                         ) -> Tuple[List[Dict[str, str]], List[str], List[int]]:
     warnings: List[str] = []
     too_short_idxs: List[int] = []
     processed: List[Dict[str, str]] = []
@@ -287,7 +330,6 @@ def _enforce_word_bounds(
         wc = word_count(text)
         meta = dict(cap)
         if wc > max_words:
-            # trim to cap
             words = re.findall(r"\S+", text)
             trimmed = " ".join(words[:max_words]).rstrip(",;:-")
             if not re.search(r"[.!?]$", trimmed):
@@ -296,16 +338,15 @@ def _enforce_word_bounds(
             meta["char_count"] = len(trimmed)
             meta["trimmed_words"] = True
         elif wc < min_words and platform != "Twitter/X":
-            # mark for refinement
             meta["too_short"] = True
             too_short_idxs.append(idx)
         processed.append(meta if "text" in meta else {"text": text, "char_count": len(text)})
-
     if any(m.get("trimmed_words") for m in processed):
         warnings.append("One or more items exceeded the target word cap and were trimmed.")
     if too_short_idxs:
         warnings.append("Some items were below 80% of the target and were expanded.")
     return processed, list(set(warnings)), too_short_idxs
+
 
 # -------------------------------
 # Providers & Utilities
@@ -365,22 +406,20 @@ def is_probably_chat_model(model_id: str) -> bool:
         return False
     return any(tok in nid for tok in ["gpt", "o3", "4o", "4.1", "3.5"])
 
-
 def fetch_openai_chat_models(api_key: str) -> List[str]:
-    """Fetch OpenAI models and filter to likely chat-capable ones"""
     try:
         client = OpenAI(api_key=api_key, timeout=30)
         res = client.models.list()
         ids = [m.id for m in getattr(res, "data", []) if getattr(m, "id", None)]
         chat_ids = [mid for mid in ids if is_probably_chat_model(mid)]
+        chat_ids = [m for m in chat_ids if not m.lower().startswith("gpt-5")]
         favorites = [m for m in FALLBACK_OPENAI_MODELS if m in chat_ids]
         others = sorted(set(chat_ids) - set(favorites))
         ordered = favorites + others
-        return ordered or FALLBACK_OPENAI_MODELS
+        return ordered or [m for m in FALLBACK_OPENAI_MODELS if not m.lower().startswith("gpt-5")]
     except Exception:
-        return FALLBACK_OPENAI_MODELS
+        return [m for m in FALLBACK_OPENAI_MODELS if not m.lower().startswith("gpt-5")]
 
-# ---- OpenAI generation + refine
 def _openai_chat(api_key: str, model: str, prompt: str, temperature: float, max_tokens: int) -> str:
     client = OpenAI(api_key=api_key, timeout=60)
     resp = client.chat.completions.create(
@@ -392,52 +431,32 @@ def _openai_chat(api_key: str, model: str, prompt: str, temperature: float, max_
     )
     return resp.choices[0].message.content
 
-def generate_captions_openai(
-    api_key: str,
-    description: str,
-    platform: str,
-    tone: str,
-    content_type: str,
-    word_target: int,
-    model: str
-) -> Tuple[List[Dict[str, str]], List[str]]:
+def generate_captions_openai(api_key: str, description: str, platform: str, tone: str,
+                             content_type: str, word_target: int, model: str
+                             ) -> Tuple[List[Dict[str, str]], List[str]]:
     prompt = get_prompt(description, platform, tone, content_type, word_target, fenced=False, min_ratio=0.8)
     est_tokens = int(min(max(word_target * 7 * 2, 1200), 7000))
-
-    # 1) Initial generation
     content = _openai_chat(api_key, model, prompt, temperature=0.85, max_tokens=est_tokens)
     data = _extract_json(content)
     normalized = _normalize_captions(data)
-
-    # 2) Platform enforcement
     stage1, warns_p = _enforce_platform_rules(normalized, platform)
-
-    # 3) Word-range enforcement (trim, flag under-range)
     min_words = max(1, math.floor(0.8 * word_target))
     stage2, warns_w1, too_short = _enforce_word_bounds(stage1, min_words, word_target, platform)
-
-    # 4) If under-range (and not Twitter), attempt a single refine pass
     if too_short and platform != "Twitter/X":
         items_to_refine = [stage2[i]["text"] for i in range(len(stage2))]
-        refine_prompt = get_refine_prompt(
-            items_to_refine, description, platform, tone, content_type,
-            min_words=min_words, max_words=word_target, fenced=False
-        )
-        # use slightly lower temperature for adherence
+        refine_prompt = get_refine_prompt(items_to_refine, description, platform, tone, content_type,
+                                          min_words=min_words, max_words=word_target, fenced=False)
         refine_tokens = int(min(max(word_target * 7 * 2, 1200), 7000))
         refined_content = _openai_chat(api_key, model, refine_prompt, temperature=0.6, max_tokens=refine_tokens)
         refined_json = _extract_json(refined_content)
         refined_items = _normalize_captions(refined_json)
-
-        # re-apply platform + word bounds to refined items
         r1, warns_p2 = _enforce_platform_rules(refined_items, platform)
         r2, warns_w2, _ = _enforce_word_bounds(r1, min_words, word_target, platform)
         return r2, list(set(warns_p + warns_w1 + warns_p2 + warns_w2))
-
     return stage2, list(set(warns_p + warns_w1))
 
-# ---- Ollama generation + refine
-def _ollama_chat(base_url: str, model: str, prompt: str, temperature: float, connect_timeout: int, read_timeout: int, fenced: bool) -> str:
+def _ollama_chat(base_url: str, model: str, prompt: str, temperature: float,
+                 connect_timeout: int, read_timeout: int, fenced: bool) -> str:
     url = f"{base_url.rstrip('/')}/api/chat"
     payload = {
         "model": model,
@@ -450,48 +469,32 @@ def _ollama_chat(base_url: str, model: str, prompt: str, temperature: float, con
     data = r.json()
     return data["message"]["content"]
 
-def generate_captions_ollama(
-    description: str,
-    platform: str,
-    tone: str,
-    content_type: str,
-    word_target: int,
-    base_url: str = "http://localhost:11434",
-    model: str = DEFAULT_OLLAMA_MODEL,
-    connect_timeout: int = 10,
-    read_timeout: int = 300,
-) -> Tuple[List[Dict[str, str]], List[str]]:
+def generate_captions_ollama(description: str, platform: str, tone: str, content_type: str, word_target: int,
+                             base_url: str = "http://localhost:11434", model: str = DEFAULT_OLLAMA_MODEL,
+                             connect_timeout: int = 10, read_timeout: int = 300
+                             ) -> Tuple[List[Dict[str, str]], List[str]]:
     check_ollama_health(base_url)
     prompt = get_prompt(description, platform, tone, content_type, word_target, fenced=True, min_ratio=0.8)
-
-    # 1) Initial generation
-    content = _ollama_chat(base_url, model, prompt, temperature=0.85, connect_timeout=connect_timeout, read_timeout=read_timeout, fenced=True)
+    content = _ollama_chat(base_url, model, prompt, temperature=0.85,
+                           connect_timeout=connect_timeout, read_timeout=read_timeout, fenced=True)
     data = _extract_json(content)
     normalized = _normalize_captions(data)
-
-    # 2) Platform enforcement
     stage1, warns_p = _enforce_platform_rules(normalized, platform)
-
-    # 3) Word-range enforcement
     min_words = max(1, math.floor(0.8 * word_target))
     stage2, warns_w1, too_short = _enforce_word_bounds(stage1, min_words, word_target, platform)
-
-    # 4) Refine pass if needed (non-Twitter)
     if too_short and platform != "Twitter/X":
         items_to_refine = [stage2[i]["text"] for i in range(len(stage2))]
-        refine_prompt = get_refine_prompt(
-            items_to_refine, description, platform, tone, content_type,
-            min_words=min_words, max_words=word_target, fenced=True
-        )
-        refined_content = _ollama_chat(base_url, model, refine_prompt, temperature=0.6, connect_timeout=connect_timeout, read_timeout=read_timeout, fenced=True)
+        refine_prompt = get_refine_prompt(items_to_refine, description, platform, tone, content_type,
+                                          min_words=min_words, max_words=word_target, fenced=True)
+        refined_content = _ollama_chat(base_url, model, refine_prompt, temperature=0.6,
+                                       connect_timeout=connect_timeout, read_timeout=read_timeout, fenced=True)
         refined_json = _extract_json(refined_content)
         refined_items = _normalize_captions(refined_json)
-
         r1, warns_p2 = _enforce_platform_rules(refined_items, platform)
         r2, warns_w2, _ = _enforce_word_bounds(r1, min_words, word_target, platform)
         return r2, list(set(warns_p + warns_w1 + warns_p2 + warns_w2))
-
     return stage2, list(set(warns_p + warns_w1))
+
 
 # -------------------------------
 # Streamlit UI
@@ -499,7 +502,6 @@ def generate_captions_ollama(
 st.set_page_config(page_title="Social Media Generator", page_icon="📝", layout="wide")
 st.title("📝 Social Media Generator")
 
-# Guard flag to prevent double-click spam
 if "busy" not in st.session_state:
     st.session_state["busy"] = False
 
@@ -509,13 +511,48 @@ def default_words(platform: str, content_type: str) -> int:
 with st.sidebar:
     st.header("Inputs")
 
-    # Toggle: enable OpenAI (paid). Default OFF => use Ollama.
+    # ---- Always resolve secrets/env on EVERY rerun (no stale state) ----
+    auto_key, auto_source = resolve_openai_key()
+
     use_openai = st.toggle(
         "Use OpenAI (paid)",
         value=False,
         help="Enable to use OpenAI GPT models. When OFF, the app uses your local Ollama model.",
         key="use_openai",
     )
+
+    # User override never touches st.secrets; it avoids crashes and staleness.
+    user_key = st.text_input(
+        "OpenAI API Key (optional override)",
+        type="password",
+        help="If left blank, the app uses your Secrets/env key automatically.",
+        key="openai_key_input",
+    )
+
+    # Effective key selection order: user override > auto discovered
+    effective_openai_key = (user_key.strip() if user_key and user_key.strip() else auto_key).strip()
+
+    # Keep environment in sync for libraries that read from env
+    if effective_openai_key:
+        os.environ["OPENAI_API_KEY"] = effective_openai_key
+
+    # Diagnostics (masked)
+    with st.expander("🔎 Key diagnostics (safe to share)"):
+        st.write({
+            "auto_source": auto_source,
+            "auto_key_masked": _mask_key(auto_key),
+            "user_override_provided": bool(user_key.strip()),
+            "effective_key_masked": _mask_key(effective_openai_key),
+            "env_OPENAI_API_KEY_present": bool(os.getenv("OPENAI_API_KEY")),
+        })
+        st.caption("If auto_source is 'none' or 'secrets:not_found', add `.streamlit/secrets.toml` or set the `OPENAI_API_KEY` env var.")
+
+    if use_openai and not effective_openai_key:
+        st.info(
+            "No OpenAI API key detected. Add it via `.streamlit/secrets.toml` "
+            "(e.g., `openai_api_key = \"sk-...\"`), set the `OPENAI_API_KEY` environment variable, "
+            "or paste it above."
+        )
 
     # Common inputs
     description = st.text_area(
@@ -528,56 +565,22 @@ with st.sidebar:
     content_type = st.selectbox("Content type", CONTENT_TYPES, index=0, key="content_type")
     tone = st.selectbox("Tone (optional)", TONES, index=0, key="tone")
 
-    # --- Controlled word target (80–100% band enforcement downstream) ---
     rec_target = default_words(platform, content_type)
-
-    # Initialize context/state
     if "wt_context" not in st.session_state:
         st.session_state["wt_context"] = (platform, content_type)
     if "word_target" not in st.session_state:
         st.session_state["word_target"] = rec_target
-
-    # Update to recommended default when platform/type changes
     if (platform, content_type) != st.session_state["wt_context"]:
         st.session_state["wt_context"] = (platform, content_type)
         st.session_state["word_target"] = rec_target
 
-    # Always read/write via session_state (no default passed)
-    st.number_input(
-        "Target words per item",
-        min_value=5, max_value=2000,
-        step=5,
-        key="word_target"
-    )
-
+    st.number_input("Target words per item", min_value=5, max_value=2000, step=5, key="word_target")
     st.caption(f"Recommended for {platform} ({content_type.lower()}): ~{rec_target} words. (App enforces 80–100% range.)")
 
-    # Provider-specific inputs
     if use_openai:
-        api_key = st.text_input(
-            "OpenAI API Key",
-            type="password",
-            help="Use Streamlit secrets in production.",
-            key="openai_key",
-        )
-
-        # OpenAI Model Selector
-        def fetch_openai_chat_models(api_key_in: str) -> List[str]:
-            try:
-                client = OpenAI(api_key=api_key_in, timeout=30)
-                res = client.models.list()
-                ids = [m.id for m in getattr(res, "data", []) if getattr(m, "id", None)]
-                chat_ids = [mid for mid in ids if is_probably_chat_model(mid)]
-                favorites = [m for m in FALLBACK_OPENAI_MODELS if m in chat_ids]
-                others = sorted(set(chat_ids) - set(favorites))
-                ordered = favorites + others
-                ordered = [m for m in ordered if not m.lower().startswith("gpt-5")]
-                return ordered or FALLBACK_OPENAI_MODELS
-            except Exception:
-                return FALLBACK_OPENAI_MODELS
-
-        openai_models = fetch_openai_chat_models(api_key) if api_key else FALLBACK_OPENAI_MODELS
-        openai_models = [m for m in openai_models if not m.lower().startswith("gpt-5")]
+        openai_models = fetch_openai_chat_models(effective_openai_key) if effective_openai_key else [
+            m for m in FALLBACK_OPENAI_MODELS if not m.lower().startswith("gpt-5")
+        ]
         preferred = "gpt-4o-mini" if "gpt-4o-mini" in openai_models else openai_models[0]
         openai_model = st.selectbox(
             "OpenAI model",
@@ -586,21 +589,13 @@ with st.sidebar:
             key="openai_model_select",
             help="Choose the OpenAI model used for generation."
         )
-
-        # Ollama fields not used in this branch
         ollama_base = None
         ollama_model = None
         read_timeout = None
         connect_timeout = None
     else:
-        # OLLAMA settings
-        ollama_base = st.text_input(
-            "Ollama base URL",
-            value="http://localhost:11434",
-            key="ollama_base",
-        )
+        ollama_base = st.text_input("Ollama base URL", value="http://localhost:11434", key="ollama_base")
 
-        # -- Local models list & refresh
         def list_ollama_local_models_safe(base: str) -> List[str]:
             try:
                 return list_ollama_local_models(base)
@@ -624,7 +619,6 @@ with st.sidebar:
             key="ollama_model_select"
         )
 
-        # -- Pull a model from registry
         st.markdown("**Pull a model from Ollama registry** (e.g., `llama3.2:3b`, `qwen2.5:3b-instruct`)")
         pull_name = st.text_input("Model name to pull", value=DEFAULT_OLLAMA_MODEL, key="ollama_pull_name")
         pull_btn = st.button("⬇️ Pull model")
@@ -635,30 +629,21 @@ with st.sidebar:
                 st.success(f"Pull completed for `{pull_name}`")
                 with st.expander("Pull output", expanded=False):
                     st.text(status or "Done.")
-                # refresh local list after pull
                 st.session_state["ollama_local_models"] = list_ollama_local_models_safe(ollama_base)
             except Exception as e:
                 st.error(str(e))
 
-        read_timeout = st.number_input(
-            "Read timeout (seconds)",
-            min_value=30, max_value=600, value=300, step=30,
-            key="ollama_read_to",
-        )
-        connect_timeout = st.number_input(
-            "Connect timeout (seconds)",
-            min_value=2, max_value=60, value=10, step=2,
-            key="ollama_connect_to",
-        )
+        read_timeout = st.number_input("Read timeout (seconds)", min_value=30, max_value=600, value=300, step=30, key="ollama_read_to")
+        connect_timeout = st.number_input("Connect timeout (seconds)", min_value=2, max_value=60, value=10, step=2, key="ollama_connect_to")
         st.caption("Tip: pull the model first:  e.g., `ollama pull llama3.2:3b`")
-        api_key = None
         openai_model = None
 
     generate_clicked = st.button("Generate", disabled=st.session_state["busy"])
 
-st.markdown("> Tips: Twitter/X is char-limited (we'll truncate if needed). The app enforces an 80–100% word range (except for the X 280-char limit).")
+st.markdown("> Tips: Twitter/X is char-limited (we'll truncate if needed). The app enforces an 80–100% word range (except the X 280-char limit).")
 
-# Copy button helper (no key argument to avoid TypeError on older Streamlit)
+
+# Copy button helper
 def render_copy_button(text: str, key: str):
     escaped = json.dumps(text)
     html = f"""
@@ -686,6 +671,7 @@ def render_copy_button(text: str, key: str):
     """
     components.html(html, height=48)
 
+
 # -------------------------------
 # Cache
 # -------------------------------
@@ -707,7 +693,6 @@ def cached_generate(description: str, platform: str, tone: str,
             connect_timeout=connect_timeout or 10,
             read_timeout=read_timeout or 300,
         )
-    # default: openai
     if not api_key:
         raise RuntimeError("Missing OpenAI API key")
     return generate_captions_openai(
@@ -715,94 +700,97 @@ def cached_generate(description: str, platform: str, tone: str,
         model=openai_model or "gpt-4o-mini"
     )
 
+
 # -------------------------------
 # Main action
 # -------------------------------
 if generate_clicked:
-    # Validation
     if not description or len(description.strip()) < 10:
         st.warning("Description is too short. Please write at least 10 characters.")
-    elif (use_openai) and (not api_key or not api_key.strip()):
-        st.error("Please enter your OpenAI API key.")
     else:
-        if st.session_state["busy"]:
-            st.stop()
-        st.session_state["busy"] = True
-        try:
-            with st.spinner("Generating items..."):
-                provider = "openai" if use_openai else "ollama"
-                caps, warns = cached_generate(
-                    description.strip(), platform, tone,
-                    content_type, int(st.session_state["word_target"]),
-                    provider, api_key, openai_model,
-                    ollama_base, ollama_model,
-                    connect_timeout, read_timeout
-                )
+        provider = "openai" if st.session_state["use_openai"] else "ollama"
 
-        except RuntimeError as e:
-            if (not use_openai) and api_key:
-                st.warning(f"{e}  • Falling back to OpenAI…")
-                caps, warns = cached_generate(
-                    description.strip(), platform, tone,
-                    content_type, int(st.session_state["word_target"]),
-                    "openai", api_key, "gpt-4o-mini",
-                    None, None, None, None
-                )
-            else:
-                st.error(str(e))
+        # KEY CHECK RIGHT BEFORE CALL (final gate)
+        if provider == "openai" and not effective_openai_key:
+            st.error("Please set your OpenAI API key (Secrets/env/UI).")
+        else:
+            if st.session_state["busy"]:
+                st.stop()
+            st.session_state["busy"] = True
+            try:
+                with st.spinner("Generating items..."):
+                    caps, warns = cached_generate(
+                        description.strip(), platform, tone,
+                        content_type, int(st.session_state["word_target"]),
+                        provider,
+                        effective_openai_key if provider == "openai" else None,
+                        openai_model,
+                        ollama_base, ollama_model,
+                        connect_timeout, read_timeout
+                    )
+            except RuntimeError as e:
+                if (provider == "ollama") and effective_openai_key:
+                    st.warning(f"{e}  • Falling back to OpenAI…")
+                    caps, warns = cached_generate(
+                        description.strip(), platform, tone,
+                        content_type, int(st.session_state["word_target"]),
+                        "openai", effective_openai_key, "gpt-4o-mini",
+                        None, None, None, None
+                    )
+                else:
+                    st.error(str(e))
+                    st.session_state["busy"] = False
+                    st.stop()
+            except AuthenticationError:
+                st.error("Authentication failed. Please check your OpenAI API key.")
                 st.session_state["busy"] = False
                 st.stop()
-        except AuthenticationError:
-            st.error("Authentication failed. Please check your OpenAI API key.")
-            st.session_state["busy"] = False
-            st.stop()
-        except RateLimitError:
-            st.error("Rate limit exceeded after multiple retries. Try again shortly.")
-            st.session_state["busy"] = False
-            st.stop()
-        except APIError as e:
-            st.error(f"OpenAI API error: {e}")
-            st.session_state["busy"] = False
-            st.stop()
-        except json.JSONDecodeError:
-            st.error("The model returned invalid JSON. Try again.")
-            st.session_state["busy"] = False
-            st.stop()
-        except Exception as e:
-            st.error(f"Unexpected error: {e}")
-            st.session_state["busy"] = False
-            st.stop()
+            except RateLimitError:
+                st.error("Rate limit exceeded after multiple retries. Try again shortly.")
+                st.session_state["busy"] = False
+                st.stop()
+            except APIError as e:
+                st.error(f"OpenAI API error: {e}")
+                st.session_state["busy"] = False
+                st.stop()
+            except json.JSONDecodeError:
+                st.error("The model returned invalid JSON. Try again.")
+                st.session_state["busy"] = False
+                st.stop()
+            except Exception as e:
+                st.error(f"Unexpected error: {e}")
+                st.session_state["busy"] = False
+                st.stop()
 
-        if 'caps' in locals():
-            if warns:
-                for w in warns:
-                    st.warning(w)
+            if 'caps' in locals():
+                if warns:
+                    for w in warns:
+                        st.warning(w)
 
-            st.subheader("Your Output")
-            if not caps:
-                st.info("No items returned. Try again or simplify your description.")
-            else:
-                for i, c in enumerate(caps, start=1):
-                    text = c.get("text", "").strip()
-                    char_count = c.get("char_count", len(text))
-                    wcount = word_count(text)
-                    badges = []
-                    if c.get("trimmed_words"):
-                        badges.append("trimmed to word cap")
-                    if c.get("truncated"):
-                        badges.append("truncated to 280 chars")
-                    if c.get("too_short"):
-                        badges.append("below 80% (after best effort)")
-                    badge_str = f" • {' • '.join(badges)}" if badges else ""
-                    label = f"{i}. {wcount} words • {char_count} chars{badge_str}"
-                    with st.expander(label, expanded=False):
-                        st.markdown(text)
-                        render_copy_button(text, key=f"{i}")
+                st.subheader("Your Output")
+                if not caps:
+                    st.info("No items returned. Try again or simplify your description.")
+                else:
+                    for i, c in enumerate(caps, start=1):
+                        text = c.get("text", "").strip()
+                        char_count = c.get("char_count", len(text))
+                        wcount = word_count(text)
+                        badges = []
+                        if c.get("trimmed_words"):
+                            badges.append("trimmed to word cap")
+                        if c.get("truncated"):
+                            badges.append("truncated to 280 chars")
+                        if c.get("too_short"):
+                            badges.append("below 80% (after best effort)")
+                        badge_str = f" • {' • '.join(badges)}" if badges else ""
+                        label = f"{i}. {wcount} words • {char_count} chars{badge_str}"
+                        with st.expander(label, expanded=False):
+                            st.markdown(text)
+                            render_copy_button(text, key=f"{i}")
 
-            st.success("Done! Feel free to tweak inputs and regenerate.")
-        st.session_state["busy"] = False
+                st.success("Done! Feel free to tweak inputs and regenerate.")
+            st.session_state["busy"] = False
 
-# Sidebar footnote
 with st.sidebar:
     st.caption(
         "Default provider: Ollama (local). Toggle 'Use OpenAI (paid)' to switch. "

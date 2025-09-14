@@ -1,4 +1,4 @@
-name: captiongen
+name: smg
 channels:
   - conda-forge
   - defaults
