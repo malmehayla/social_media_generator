@@ -1,4 +1,3 @@
-````markdown
 # Social Media Generator (AI-Powered) 📝⚡
 
 One-click social copy for marketers, founders, and creators.  
@@ -42,7 +41,7 @@ Generate platform-optimised captions or posts for **Twitter/X, Instagram, Linked
 
 ## Streamlit Community Cloud
 This application is hosted on **Streamlit Community Cloud**:  
-👉 [Launch the App](https://socialmediagenerator-fzxysxck3rlu9zt6etpcnm.streamlit.app)  
+[Launch the App](https://socialmediagenerator-fzxysxck3rlu9zt6etpcnm.streamlit.app)  
 
 ### Important Notes
 - On the cloud version, only **OpenAI features** are available (toggle the switch).  
@@ -123,7 +122,6 @@ Works on **Windows/macOS/Linux**. Recommended: Conda + Python 3.10.
 ```bash
 git clone https://github.com/malmehayla/social_media_generator.git
 cd social_media_generator
-````
 
 ### 2. Create & activate Conda environment
 
