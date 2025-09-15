@@ -11,10 +11,18 @@ Generate platform-optimised captions or posts for **Twitter/X, Instagram, Linked
 - GitHub: [malmehayla](https://github.com/malmehayla)  
 - LinkedIn: [Mohamed Almehayla](https://linkedin.com/in/malmehayla)  
 
+## Streamlit Community Cloud
+This application is hosted on **Streamlit Community Cloud**: [Launch the App](https://socialmediagenerator-fzxysxck3rlu9zt6etpcnm.streamlit.app)  
+
+### Important Notes
+- On the cloud version, only **OpenAI features** are available (toggle the switch).  
+- You will need an **OpenAI API Key**.  
+
+Generate your API key here: [OpenAI API Keys](https://platform.openai.com/api-keys) 
+
 ---
 
 ## Table of Contents
-- [Streamlit Community Cloud](#streamlit-community-cloud)  
 - [Overview](#overview)  
 - [Features](#features)  
 - [Tech Stack](#tech-stack)   
@@ -32,17 +40,6 @@ Generate platform-optimised captions or posts for **Twitter/X, Instagram, Linked
 - [FAQ](#faq)  
 - [Future Roadmap](#future-roadmap)  
 - [Quick Start](#quick-start)  
-
----
-
-## Streamlit Community Cloud
-This application is hosted on **Streamlit Community Cloud**: [Launch the App](https://socialmediagenerator-fzxysxck3rlu9zt6etpcnm.streamlit.app)  
-
-### Important Notes
-- On the cloud version, only **OpenAI features** are available (toggle the switch).  
-- You will need an **OpenAI API Key**.  
-
-Generate your API key here: [OpenAI API Keys](https://platform.openai.com/api-keys)  
 
 ---
 
