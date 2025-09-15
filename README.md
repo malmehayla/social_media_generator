@@ -1,298 +1,380 @@
-## Social Media Generator (AI-Powered) 📝⚡
-One-click social copy for marketers, founders, and creators.
-Generate platform-optimized captions or posts for Twitter/X, Instagram, LinkedIn, TikTok, and Facebook.
-Default provider: Ollama (local & free). Optional provider: OpenAI (paid).
+````markdown
+# Social Media Generator (AI-Powered) 📝⚡
 
-## Built By  
+One-click social copy for marketers, founders, and creators.  
+Generate platform-optimised captions or posts for **Twitter/X, Instagram, LinkedIn, TikTok, and Facebook**.  
+
+- **Default provider:** Ollama (local & free)  
+- **Optional provider:** OpenAI (paid)  
+
+---
+
+## Table of Contents
+- [Built By](#built-by)  
+- [Streamlit Community Cloud](#streamlit-community-cloud)  
+- [Overview](#overview)  
+- [Features](#features)  
+- [Tech Stack](#tech-stack)  
+- [Architecture](#architecture)  
+- [Components](#components)  
+- [Installation & Setup](#installation--setup)  
+- [Configuration](#configuration)  
+- [Usage](#usage)  
+- [How It Works](#how-it-works)  
+- [Platform-Specific Adjustments](#platform-specific-adjustments)  
+- [Testing & QA](#testing--qa)  
+- [Performance & Costs](#performance--costs)  
+- [Security](#security)  
+- [Contributing](#contributing)  
+- [License](#license)  
+- [FAQ](#faq)  
+- [Future Roadmap](#future-roadmap)  
+- [Quick Start](#quick-start)  
+
+---
+
+## Built By
 **Mohamed Almehayla**  
 - GitHub: [@malmehayla](https://github.com/malmehayla)  
 - LinkedIn: [Mohamed Almehayla](https://linkedin.com/in/malmehayla)  
 
-## Streamlit Community Cloud  
+---
+
+## Streamlit Community Cloud
 This application is hosted on **Streamlit Community Cloud**:  
 👉 [Launch the App](https://socialmediagenerator-fzxysxck3rlu9zt6etpcnm.streamlit.app)  
 
-### Important Notes  
-- On the cloud version, only **OpenAI features** are available (make sure to toggle the switch).  
-- You will need an **OpenAI API Key** to use these features.  
+### Important Notes
+- On the cloud version, only **OpenAI features** are available (toggle the switch).  
+- You will need an **OpenAI API Key**.  
 
-You can generate your API key here: [OpenAI API Keys](https://platform.openai.com/api-keys)  
+Generate your API key here: [OpenAI API Keys](https://platform.openai.com/api-keys)  
+
+---
 
 ## Overview
-Social Media Generator is a Python + Streamlit web app that turns a plain-language product or campaign description into seven diverse, platform-optimized items:
-- Captions (short, hooky, emoji-rich)
-- Posts (long-form for LinkedIn/Facebook/Instagram, 400+ words where applicable)
+The Social Media Generator is a **Python + Streamlit web app** that transforms a plain product or campaign description into **seven diverse, platform-optimised outputs**:
 
-It auto-adjusts tone, structure, and length based on your selections, ensures platform-specific constraints (e.g., Twitter/X 280-char cap), and includes copy-to-clipboard buttons for each item.
+- **Captions:** short, catchy, emoji-rich  
+- **Posts:** long-form (LinkedIn/Facebook/Instagram, 400+ words)  
 
-Who it’s for
+The app auto-adjusts tone, structure, and length, ensures platform-specific rules (e.g., Twitter/X 280-character cap), and provides copy-to-clipboard buttons for each item.  
 
-- Marketers and social media managers shipping copy daily
-- Small business owners who want a quick, on-brand caption bank
-- Creators and teams needing consistent ideas with a polished format
+### Who It’s For
+- Marketers and social media managers  
+- Small business owners needing quick, on-brand caption banks  
+- Creators and teams requiring consistent, polished content  
+
+---
 
 ## Features
-- Platform support: Twitter/X, Instagram, LinkedIn, TikTok, Facebook
-- Two providers:
-    - Ollama (local & free) — default; list installed models, pull new models in-app
-    - OpenAI (paid) — toggle on; model picker with safe fallbacks (e.g., gpt-4o-mini)
-- Content types: Caption (concise) or Post (structured long-form, 400+ words on supported platforms)
-- Word target control: Auto-sets by platform & type; app enforces 80–100% of your chosen target with a refine pass (non-Twitter)
-- JSON-shaped outputs: Exactly 7 items for easy parsing/automation
-- Style baked in: 2–3 emojis per item + CTA ending (e.g., “Shop now!”, “Request a demo!”)
-- Robust UX: Copy buttons per item, warnings for truncation/trim/refine, rate-limit retries
+- Platform support: Twitter/X, Instagram, LinkedIn, TikTok, Facebook  
+- Two providers:  
+  - **Ollama (local & free)** – default; manage models in-app  
+  - **OpenAI (paid)** – toggle on; model picker with fallbacks  
+- Content types: Caption or Post (400+ words on supported platforms)  
+- Word target control: auto-set per platform/type, enforces 80–100% window  
+- JSON-shaped outputs: exactly 7 items for automation  
+- Styled copy: 2–3 emojis per item + CTA ending  
+- Strong UX: copy buttons, truncation/refine warnings, retry on rate limits  
+
+---
 
 ## Tech Stack
 | Component         | Version | Purpose                                         |
 | ----------------- | ------: | ----------------------------------------------- |
 | Python            |   3.10+ | Language/runtime                                |
 | Streamlit         | 1.31.0+ | Web UI                                          |
-| OpenAI Python SDK | 1.40.0+ | Chat Completions for GPT models                 |
+| OpenAI Python SDK | 1.40.0+ | GPT chat completions                            |
 | Requests          | 2.31.0+ | HTTP client (Ollama REST)                       |
-| Ollama (binary)   |  latest | Local LLMs (server at `http://localhost:11434`) |
-| Git               |  latest | Version control & CI/CD (optional)              |
+| Ollama (binary)   |  latest | Local LLMs (`http://localhost:11434`)           |
+| Git               |  latest | Version control / CI/CD (optional)              |
+
+---
 
 ## Architecture
-High-Level Diagram
+**High-Level Diagram:** _To be added_  
 
-To Be Added
+---
 
 ## Components
-- Prompt Template
-F-string with the user’s description, platform, tone, content type, and word target. Includes few-shot examples, sets temperature (0.85 default) and requires JSON output (7 items).
+- **Prompt Template**  
+  F-string with description, platform, tone, content type, and word target. Uses few-shot examples, `temperature=0.85`, and enforces JSON output.  
 
-- Provider Layer
-    - Ollama: /api/chat POST with model name; supports listing local models and pulling new ones
-    - OpenAI: chat.completions.create(...) with the selected model (e.g., gpt-4o-mini)
+- **Provider Layer**  
+  - Ollama: `/api/chat` POST with model name  
+  - OpenAI: `chat.completions.create(...)`  
 
-- Post-Processing
-    - Parse/repair JSON
-    - Enforce Twitter/X 280-char rule
-    - Enforce 80–100% word window (trim if over; refine once if under, except on Twitter)
+- **Post-Processing**  
+  - Parse/repair JSON  
+  - Enforce Twitter 280-char limit  
+  - Apply 80–100% word window  
 
-- UI Layer
-    - Sidebar inputs (provider toggle, key/model selection, description, platform, tone, content type, word target)
-    - Results with expanders, word + char counts, copy buttons, and warnings
+- **UI Layer**  
+  - Sidebar inputs (provider, model/key, description, tone, etc.)  
+  - Expanders with results, counts, and copy buttons  
+
+---
 
 ## Installation & Setup
-Works on Windows/macOS/Linux. We recommend Conda for a clean Python 3.10 environment.
+Works on **Windows/macOS/Linux**. Recommended: Conda + Python 3.10.
 
-1) Clone the repo
-```
+### 1. Clone the repo
+```bash
 git clone https://github.com/malmehayla/social_media_generator.git
 cd social_media_generator
-```
+````
 
-2) Create & activate Conda environment
+### 2. Create & activate Conda environment
 
-Option A — environment.yml (recommended)
-```
+**Option A (recommended) — `environment.yml`**
+
+```bash
 conda env create -f environment.yml
 conda activate smg
 ```
 
-Option B — manual
-```
+**Option B — manual**
+
+```bash
 conda create -n smg python=3.10 -y
 conda activate smg
 pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-3) Install & run Ollama (default provider)
+### 3. Install & run Ollama
 
-Windows: winget install Ollama.Ollama
-macOS: brew install ollama
-Linux: see https://ollama.com
+* Windows: `winget install Ollama.Ollama`
+* macOS: `brew install ollama`
+* Linux: see [Ollama Docs](https://ollama.com)
 
-Pull at least one chat-friendly model (you can also pull inside the app)
-```
+Pull a model:
+
+```bash
 ollama pull llama3.2:3b
-# other good options:
-#   qwen2.5:3b-instruct
-#   llama3.1:8b
+# Other good options:
+# qwen2.5:3b-instruct
+# llama3.1:8b
 ```
-Test server:
-```
+
+Verify:
+
+```bash
 curl http://localhost:11434/api/version
 ```
 
-4) (Optional) Set your OpenAI API key
+### 4. (Optional) Set OpenAI API key
 
-Local (session only):
+**macOS/Linux:**
 
-macOS/Linux:
-```
+```bash
 export OPENAI_API_KEY="sk-..."
 ```
 
-Windows PowerShell:
-```
+**Windows PowerShell:**
+
+```powershell
 setx OPENAI_API_KEY "sk-..."
 ```
-(Restart terminal to load new env var.)
 
-Streamlit Secrets (recommended prod): create .streamlit/secrets.toml (ignored by Git):
-```
+Or in `.streamlit/secrets.toml`:
+
+```toml
 OPENAI_API_KEY = "sk-..."
 ```
 
-5) Verify setup
+### 5. Verify setup
 
-```
+```bash
 streamlit hello
 python -c "import streamlit, requests, openai; print('OK')"
 ollama run llama3.2:3b "Say OK in one word"
 ```
 
+---
+
 ## Configuration
-- Provider toggle: Default is Ollama. Toggle “Use OpenAI (paid)” to switch.
-- Ollama settings: Base URL (http://localhost:11434 by default), local models dropdown (refresh button), Pull model field, timeouts.
-- OpenAI settings: API key input, model dropdown (fetched from your key; safe fallbacks like gpt-4o-mini).
-- Word target: Auto-sets by Platform × Content Type; editable. The app enforces 80–100% of this target (except on Twitter/X when 280 chars dominates).
 
+* **Provider toggle:** Ollama (default) or OpenAI
+* **Ollama settings:** base URL, models, pull field, timeouts
+* **OpenAI settings:** API key input, model dropdown (with fallbacks)
+* **Word target:** auto-set per platform/type; enforced at 80–100%
 
-### Usage
-```
+---
+
+## Usage
+
+Run:
+
+```bash
 streamlit run app.py
 ```
 
-Sidebar Inputs
-- Provider: Ollama (default) or OpenAI (toggle)
-- Product / Campaign Description
-- Platform: Twitter/X, Instagram, LinkedIn, TikTok, Facebook
-- Content Type: Caption or Post
-- Tone: None, fun, professional, inspirational
-- Target words per item (auto-adjusts; editable)
-- Provider-specific fields (OpenAI model, Ollama pull, timeouts)
-- Click Generate.
+### Sidebar Inputs
 
-Output
-- 7 items with index, word count, and char count
-- Expanders with full text
-- Copy button for each item
-- Warnings if trimming, truncation, or refinement occurred
+* Provider (Ollama/OpenAI)
+* Product or campaign description
+* Platform: Twitter/X, Instagram, LinkedIn, TikTok, Facebook
+* Content type: Caption or Post
+* Tone: Fun, professional, inspirational, or none
+* Target word count (auto-set, editable)
 
-Example
-- Description: “Eco-friendly running shoes for urban athletes”
-- Platform: Instagram
-- Content Type: Caption
-- Tone: fun
+### Output
 
-You’ll see 7 short, emoji-rich, CTA-ending captions; some may start with a question; others are bold statements or micro-stories.
+* 7 items with word/char counts
+* Expanders with text
+* Copy buttons
+* Warnings for trimming or refinement
+
+**Example:**
+Description: *Eco-friendly running shoes for urban athletes*
+Platform: Instagram | Type: Caption | Tone: Fun
+
+Result: 7 short, emoji-rich captions with varied hooks and CTAs.
+
+---
 
 ## How It Works
 
-1- User Input → platform, content type, tone, target words, description
-2- Prompt Template → instructs LLM to return JSON with exactly 7 items
-3- Provider Call →
-    - Ollama: POST /api/chat
-    - OpenAI: chat.completions.create(...)
-4- Parsing & Rules →
-    - Repair/parse JSON
-    - Enforce Twitter/X 280-char limit
-    - Enforce 80–100% word target
-        - Trim if over
-        - Refine pass to expand if under (non-Twitter)
-5- Render → expander per item, copy button, warnings
+1. **Input:** user provides description + settings
+2. **Prompt:** app builds JSON-returning template
+3. **Provider:** sends to Ollama or OpenAI
+4. **Parsing & Rules:** JSON repair, word/char checks
+5. **Render:** results with counts and copy buttons
 
-## Platform-specific adjustments
-| Platform  | Tweaks                                                             |
-| --------- | ------------------------------------------------------------------ |
-| Twitter/X | ≤ 280 chars; punchy, high-signal; word target secondary            |
-| Instagram | Visual hooks; “Pair with this photo”; playful                      |
-| LinkedIn  | Professional/value-driven; compact paragraphs; networking phrasing |
-| TikTok    | Fast hooks; playful/trend-aware; “Watch till the end” cues         |
-| Facebook  | Conversational, community-oriented; optional single hashtag        |
+---
+
+## Platform-Specific Adjustments
+
+| Platform  | Tweaks                                          |
+| --------- | ----------------------------------------------- |
+| Twitter/X | ≤ 280 chars; concise hooks dominate word target |
+| Instagram | Visual/emoji hooks; “Pair with photo” prompts   |
+| LinkedIn  | Professional tone; networking phrasing          |
+| TikTok    | Playful, trend-aware; “Watch till the end” cues |
+| Facebook  | Conversational, community-oriented              |
+
+---
 
 ## Testing & QA
-Unit tests (suggested)
-Mock Ollama/OpenAI responses and test JSON parsing + enforcement logic.
-python script shown in app_test.py
-| Case               | Input                  | Expected                                         |
-| ------------------ | ---------------------- | ------------------------------------------------ |
-| Empty description  | `""`                   | Warning: “Description is too short”              |
-| Missing OpenAI key | OpenAI enabled, no key | Error: “Please enter your OpenAI API key.”       |
-| Rate limit         | High volume            | Backoff retries; error if still failing          |
-| Non-JSON           | Provider drift         | Show error; suggest alternate model              |
-| Over target words  | Long item              | Trim to target; show “trimmed to word cap” badge |
-| Under 80%          | Very short             | Refine pass (except Twitter) to expand           |
+
+Unit tests recommended (see `app_test.py`).
+
+| Case              | Input                  | Expected Outcome                           |
+| ----------------- | ---------------------- | ------------------------------------------ |
+| Empty description | `""`                   | Warning: “Description is too short”        |
+| Missing API key   | OpenAI enabled, no key | Error: “Please enter your OpenAI API key.” |
+| Rate limit        | High volume            | Retries with backoff, then error           |
+| Non-JSON          | Provider drift         | Show error, suggest alternative model      |
+| Over target words | Long item              | Trimmed with warning badge                 |
+| Under 80%         | Very short             | Refine pass (non-Twitter)                  |
+
+---
 
 ## Performance & Costs
-- Ollama: free, local; RAM/CPU usage depends on model size.
-- OpenAI: cost depends on model & tokens; one 7-item generation is typically low-cost (prompt + completion).
-- Use caching (@st.cache_data) to avoid unnecessary regenerations for identical inputs.
+
+* **Ollama:** free, local, hardware-dependent
+* **OpenAI:** pay-per-token; one 7-item generation is low-cost
+* Caching avoids redundant generations
+
+---
 
 ## Security
-- Never commit secrets. .streamlit/secrets.toml is ignored by Git.
-- Prefer secrets or environment variables over typing keys into the UI when sharing.
-- If hosting internally, follow your org’s key management policies.
+
+* Do not commit secrets.
+* Use `.streamlit/secrets.toml` or environment variables.
+* Follow your organisation’s key management policies.
+
+---
 
 ## Contributing
-1- Fork the repo
-2- Create a branch: git checkout -b feat/improve-word-refine
-3- Commit: git commit -m "feat: better word-range refinement"
-4- Push: git push origin feat/improve-word-refine
-5- Open a Pull Request with context, screenshots, and testing notes
+
+1. Fork the repo
+2. Create a branch:
+
+   ```bash
+   git checkout -b feat/improve-word-refine
+   ```
+3. Commit:
+
+   ```bash
+   git commit -m "feat: better word-range refinement"
+   ```
+4. Push:
+
+   ```bash
+   git push origin feat/improve-word-refine
+   ```
+5. Open a Pull Request with context and testing notes
+
+---
 
 ## License
-MIT License — free to use, modify, and distribute with attribution. See LICENSE.
+
+MIT License — free to use, modify, and distribute with attribution. See `LICENSE`.
+
+---
 
 ## FAQ
-Can I use this fully offline?
-- Ollama: Yes, a local model must be pulled in advance. 
-- OpenAI: No, requires internet.
 
-Why 7 items? Can I change it?
-- It’s a sweet spot for variety. You can change the prompt + JSON validation to any number.
+**Can I use this offline?**
 
-Why are some Twitter/X items short?
-- The 280-character limit is enforced over word targets. We’ll trim and warn when needed.
+* Ollama: Yes, if you pull a local model.
+* OpenAI: No, requires internet.
 
-I selected a model, but OpenAI shows 404. Why?
-- Your key/org likely doesn’t have access to that model. Pick gpt-4o-mini or another available option.
+**Why 7 items?**
 
-Where do I change the default word targets?
-- In the code, see the RECOMMENDED_WORDS mapping (Platform × Content Type). The UI auto-adjusts.
+* Balanced variety; changeable in code.
 
-Does the app store my API key?
-- No. The key is used at runtime. For deployed apps, use Streamlit Secrets.
+**Why are some Twitter/X items short?**
 
-Can I add hashtags or mentions?
-- Yes, tweak the prompt to include or expand hashtag rules per platform.
+* 280-character limit overrides word targets.
+
+**Why do I see a 404 on some OpenAI models?**
+
+* Your key/org may lack access. Use `gpt-4o-mini` or another available model.
+
+**Does the app store my API key?**
+
+* No. Keys are runtime only.
+
+**Can I add hashtags/mentions?**
+
+* Yes, edit the prompt template.
+
+---
 
 ## Future Roadmap
-- Multi-language support (input language or auto-detect)
-- Visual suggestions or image generation for Instagram/Facebook
-- A/B variants per item and export to CSV
-- Simple analytics or UTM scaffolding
-- Session history and favorites
-- Scheduler integrations (Buffer, Hootsuite, X/LinkedIn APIs)
-- Plugin system for tone packs and brand style guides
+
+* Multi-language support
+* Image suggestions/generation
+* A/B variants + CSV export
+* Analytics & UTM scaffolding
+* Session history & favourites
+* Scheduler integrations
+* Plugin system for tone/style guides
+
+---
 
 ## Quick Start
 
-setup
-```
-# Create env
+```bash
+# Create environment
 conda env create -f environment.yml
 conda activate smg
 conda init
 
-# Pull a local model (Ollama default)
+# Pull local model
 ollama pull llama3.2:3b
-```
 
-verify your setup
-```
+# Verify setup
 streamlit hello
 python -c "import streamlit, requests, openai; print('OK')"
 ollama run llama3.2:3b "Say OK in one word"
-```
-Note to exit streamlit click ctrl+c
 
-run
-```
-# Run
+# Run app
 streamlit run app.py
 ```
+
+Exit Streamlit with `Ctrl+C`.
