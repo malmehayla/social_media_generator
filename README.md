@@ -3,6 +3,20 @@ One-click social copy for marketers, founders, and creators.
 Generate platform-optimized captions or posts for Twitter/X, Instagram, LinkedIn, TikTok, and Facebook.
 Default provider: Ollama (local & free). Optional provider: OpenAI (paid).
 
+## Built By  
+**Mohamed Almehayla**  
+- GitHub: [@malmehayla](https://github.com/malmehayla)  
+- LinkedIn: [Mohamed Almehayla](https://linkedin.com/in/malmehayla)  
+
+## Streamlit Community Cloud  
+This application is hosted on **Streamlit Community Cloud**:  
+👉 [Launch the App](https://socialmediagenerator-fzxysxck3rlu9zt6etpcnm.streamlit.app)  
+
+### Important Notes  
+- On the cloud version, only **OpenAI features** are available (make sure to toggle the switch).  
+- You will need an **OpenAI API Key** to use these features.  
+
+You can generate your API key here: [OpenAI API Keys](https://platform.openai.com/api-keys)  
 
 ## Overview
 Social Media Generator is a Python + Streamlit web app that turns a plain-language product or campaign description into seven diverse, platform-optimized items:
