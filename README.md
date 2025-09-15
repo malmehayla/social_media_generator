@@ -3,12 +3,12 @@
 One-click social copy for marketers, founders, and creators.  
 Generate platform-optimised captions or posts for **Twitter/X, Instagram, LinkedIn, TikTok, and Facebook**.  
 
-- **Default LLM:** Ollama (local & free)  
-- **Optional LLM:** OpenAI (paid)  
+- **Default LLM:** Ollama (local / free)  
+- **Optional LLM:** OpenAI (Cloud / paid)  
 
 ## Built By
 **Mohamed Almehayla**  
-- GitHub: [@malmehayla](https://github.com/malmehayla)  
+- GitHub: [malmehayla](https://github.com/malmehayla)  
 - LinkedIn: [Mohamed Almehayla](https://linkedin.com/in/malmehayla)  
 
 ---
@@ -17,8 +17,7 @@ Generate platform-optimised captions or posts for **Twitter/X, Instagram, Linked
 - [Streamlit Community Cloud](#streamlit-community-cloud)  
 - [Overview](#overview)  
 - [Features](#features)  
-- [Tech Stack](#tech-stack)  
-- [Architecture](#architecture)  
+- [Tech Stack](#tech-stack)   
 - [Components](#components)  
 - [Installation & Setup](#installation--setup)  
 - [Configuration](#configuration)  
@@ -37,8 +36,7 @@ Generate platform-optimised captions or posts for **Twitter/X, Instagram, Linked
 ---
 
 ## Streamlit Community Cloud
-This application is hosted on **Streamlit Community Cloud**:  
-[Launch the App](https://socialmediagenerator-fzxysxck3rlu9zt6etpcnm.streamlit.app)  
+This application is hosted on **Streamlit Community Cloud**: [Launch the App](https://socialmediagenerator-fzxysxck3rlu9zt6etpcnm.streamlit.app)  
 
 ### Important Notes
 - On the cloud version, only **OpenAI features** are available (toggle the switch).  
@@ -66,12 +64,12 @@ The app auto-adjusts tone, structure, and length, ensures platform-specific rule
 ## Features
 - Platform support: Twitter/X, Instagram, LinkedIn, TikTok, Facebook  
 - Two providers:  
-  - **Ollama (local & free)** – default; manage models in-app  
-  - **OpenAI (paid)** – toggle on; model picker with fallbacks  
+  - **Ollama (local & free)** - default; manage models in-app  
+  - **OpenAI (cloud & paid)** - toggle on; model picker with fallbacks  
 - Content types: Caption or Post (400+ words on supported platforms)  
 - Word target control: auto-set per platform/type, enforces 80–100% window  
 - JSON-shaped outputs: exactly 7 items for automation  
-- Styled copy: 2–3 emojis per item + CTA ending  
+- Styled copy: 2-3 emojis per item + CTA ending  
 - Strong UX: copy buttons, truncation/refine warnings, retry on rate limits  
 
 ---
@@ -85,11 +83,6 @@ The app auto-adjusts tone, structure, and length, ensures platform-specific rule
 | Requests          | 2.31.0+ | HTTP client (Ollama REST)                       |
 | Ollama (binary)   |  latest | Local LLMs (`http://localhost:11434`)           |
 | Git               |  latest | Version control / CI/CD (optional)              |
-
----
-
-## Architecture
-**High-Level Diagram:** _To be added_  
 
 ---
 
@@ -119,6 +112,7 @@ Works on **Windows/macOS/Linux**. Recommended: Conda + Python 3.10.
 ```bash
 git clone https://github.com/malmehayla/social_media_generator.git
 cd social_media_generator
+```
 
 ### 2. Create & activate Conda environment
 
