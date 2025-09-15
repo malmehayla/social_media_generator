@@ -3,13 +3,17 @@
 One-click social copy for marketers, founders, and creators.  
 Generate platform-optimised captions or posts for **Twitter/X, Instagram, LinkedIn, TikTok, and Facebook**.  
 
-- **Default provider:** Ollama (local & free)  
-- **Optional provider:** OpenAI (paid)  
+- **Default LLM:** Ollama (local & free)  
+- **Optional LLM:** OpenAI (paid)  
+
+## Built By
+**Mohamed Almehayla**  
+- GitHub: [@malmehayla](https://github.com/malmehayla)  
+- LinkedIn: [Mohamed Almehayla](https://linkedin.com/in/malmehayla)  
 
 ---
 
 ## Table of Contents
-- [Built By](#built-by)  
 - [Streamlit Community Cloud](#streamlit-community-cloud)  
 - [Overview](#overview)  
 - [Features](#features)  
@@ -29,13 +33,6 @@ Generate platform-optimised captions or posts for **Twitter/X, Instagram, Linked
 - [FAQ](#faq)  
 - [Future Roadmap](#future-roadmap)  
 - [Quick Start](#quick-start)  
-
----
-
-## Built By
-**Mohamed Almehayla**  
-- GitHub: [@malmehayla](https://github.com/malmehayla)  
-- LinkedIn: [Mohamed Almehayla](https://linkedin.com/in/malmehayla)  
 
 ---
 
