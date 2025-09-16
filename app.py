@@ -3,8 +3,12 @@
 # Social Media Generator – Default: Ollama (free/local), Toggle: OpenAI (paid)
 # Platforms: Twitter/X, Instagram, LinkedIn, TikTok, Facebook
 # Content type: Caption/Post; adjustable target words with 80–100% enforcement (refine pass)
-# OpenAI: dropdown of available models (pulled from your key when present; excludes gpt-5)
+# OpenAI: dropdown of available models (pulled from the user's session key when present; excludes gpt-5)
 # Ollama: list installed models, refresh list, and pull models from the UI
+#
+# Privacy note:
+# - This version NEVER reads or writes any API key to st.secrets or os.environ.
+# - The key is stored ONLY in st.session_state for this browser session and is lost when the tab/app closes.
 
 import os
 import json
@@ -17,7 +21,6 @@ from requests.exceptions import RequestException
 
 import streamlit as st
 import streamlit.components.v1 as components
-from streamlit.errors import StreamlitSecretNotFoundError
 from openai import OpenAI
 from openai import APIError, AuthenticationError, RateLimitError
 
@@ -37,28 +40,9 @@ RECOMMENDED_WORDS = {
 FALLBACK_OPENAI_MODELS = ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "gpt-4.1", "o3-mini"]
 DEFAULT_OLLAMA_MODEL = "llama3.2:3b"
 
-# -------------------------------
-# Deployment Detection
-# -------------------------------
-def running_in_cloud() -> bool:
-    """
-    Heuristic to detect Streamlit Community Cloud or similar managed hosts.
-    You can also force by setting secrets/ENV:
-      - st.secrets["DEPLOYMENT_ENV"] == "cloud"
-      - STREAMLIT_CLOUD=true | STREAMLIT_SHARING=true
-    """
-    try:
-        if str(st.secrets.get("DEPLOYMENT_ENV", "")).lower() == "cloud":
-            return True
-    except Exception:
-        pass
-    env_flags = ("STREAMLIT_CLOUD", "STREAMLIT_SHARING", "RENDER", "VERCEL", "RAILWAY_ENVIRONMENT")
-    return any(os.getenv(f, "").strip() for f in env_flags)
-
-IS_CLOUD = running_in_cloud()
 
 # -------------------------------
-# Secrets & Key Resolution (LOCAL-ONLY reads)
+# Helpers (mask, counts, JSON)
 # -------------------------------
 def _mask_key(k: Optional[str]) -> str:
     if not k:
@@ -68,71 +52,7 @@ def _mask_key(k: Optional[str]) -> str:
         return "***"
     return f"{k[:4]}***{k[-4:]}"
 
-def _read_from_secrets() -> Tuple[str, str]:
-    """
-    Safely read from Streamlit secrets. LOCAL USE ONLY.
-    Returns (key, source_str).
-    """
-    try:
-        s = st.secrets
-    except Exception:
-        return "", "secrets:unavailable"
 
-    # top-level keys
-    for name in ("openai_api_key", "OPENAI_API_KEY"):
-        try:
-            v = s.get(name)
-        except StreamlitSecretNotFoundError:
-            return "", "secrets:not_found"
-        except Exception:
-            return "", "secrets:unavailable"
-        if isinstance(v, str) and v.strip():
-            return v.strip(), f"secrets:{name}"
-
-    # nested sections
-    for sect in ("openai", "OpenAI", "OPENAI"):
-        try:
-            sec = s[sect]
-        except StreamlitSecretNotFoundError:
-            return "", "secrets:not_found"
-        except Exception:
-            sec = None
-        if isinstance(sec, dict):
-            for name in ("api_key", "API_KEY", "openai_api_key", "OPENAI_API_KEY"):
-                v = sec.get(name)
-                if isinstance(v, str) and v.strip():
-                    return v.strip(), f"secrets:{sect}.{name}"
-
-    return "", "secrets:not_found"
-
-def _read_from_env() -> Tuple[str, str]:
-    for name in ("OPENAI_API_KEY", "openai_api_key"):
-        v = os.getenv(name, "").strip()
-        if v:
-            return v, f"env:{name}"
-    return "", "env:not_found"
-
-def resolve_openai_key_local_first() -> Tuple[str, str]:
-    """
-    Deterministic resolution order for LOCAL only:
-      1) Streamlit secrets
-      2) Environment variables
-      3) Empty string
-    On CLOUD, this function returns ("", "cloud:force_user_input") so we never use stored keys.
-    """
-    if IS_CLOUD:
-        return "", "cloud:force_user_input"
-    k, src = _read_from_secrets()
-    if k:
-        return k, src
-    k, src = _read_from_env()
-    if k:
-        return k, src
-    return "", "none"
-
-# -------------------------------
-# Prompt Builders
-# -------------------------------
 def get_prompt(description: str, platform: str, tone: Optional[str],
                content_type: str, word_target: int, fenced: bool = False,
                min_ratio: float = 0.8) -> str:
@@ -215,6 +135,7 @@ Output format requirements (MANDATORY):
         base += "\nDo not include any backticks, code fences, or extra commentary. Return exactly 7 items."
     return base
 
+
 def get_refine_prompt(items: List[str], description: str, platform: str, tone: Optional[str],
                       content_type: str, min_words: int, max_words: int, fenced: bool = False) -> str:
     tone_text = tone if tone and tone.lower() != "none" else "neutral"
@@ -247,9 +168,7 @@ Return ONLY JSON:
         base += "\nWrap the JSON ONLY in triple backticks like:\n```json\n{ ... }\n```"
     return base
 
-# -------------------------------
-# JSON Repair / Parsing Helpers
-# -------------------------------
+
 def _strip_code_fences(s: str) -> str:
     s = re.sub(r"^```(?:json)?\s*", "", s.strip(), flags=re.IGNORECASE)
     s = re.sub(r"\s*```$", "", s.strip())
@@ -355,6 +274,7 @@ def _enforce_word_bounds(items: List[Dict[str, str]], min_words: int, max_words:
         warnings.append("Some items were below 80% of the target and were expanded.")
     return processed, list(set(warnings)), too_short_idxs
 
+
 # -------------------------------
 # Providers & Utilities
 # -------------------------------
@@ -401,7 +321,11 @@ def pull_ollama_model(base_url: str, model: str, timeout_sec: int = 1800) -> str
             return "\n".join(status_lines) if status_lines else "Pull completed (no status)."
     except RequestException as e:
         try:
-            r = requests.post(f"{base_url.rstrip('/')}/api/pull", json={"model": model, "stream": False}, timeout=timeout_sec)
+            r = requests.post(
+                f"{base_url.rstrip('/')}/api/pull",
+                json={"model": model, "stream": False},
+                timeout=timeout_sec
+            )
             r.raise_for_status()
             return "Pull request accepted (non-streaming)."
         except Exception as e2:
@@ -414,6 +338,8 @@ def is_probably_chat_model(model_id: str) -> bool:
     return any(tok in nid for tok in ["gpt", "o3", "4o", "4.1", "3.5"])
 
 def fetch_openai_chat_models(api_key: str) -> List[str]:
+    if not api_key:
+        return [m for m in FALLBACK_OPENAI_MODELS if not m.lower().startswith("gpt-5")]
     try:
         client = OpenAI(api_key=api_key, timeout=30)
         res = client.models.list()
@@ -462,6 +388,7 @@ def generate_captions_openai(api_key: str, description: str, platform: str, tone
         return r2, list(set(warns_p + warns_w1 + warns_p2 + warns_w2))
     return stage2, list(set(warns_p + warns_w1))
 
+
 def _ollama_chat(base_url: str, model: str, prompt: str, temperature: float,
                  connect_timeout: int, read_timeout: int, fenced: bool) -> str:
     url = f"{base_url.rstrip('/')}/api/chat"
@@ -502,6 +429,7 @@ def generate_captions_ollama(description: str, platform: str, tone: str, content
         return r2, list(set(warns_p + warns_w1 + warns_p2 + warns_w2))
     return stage2, list(set(warns_p + warns_w1))
 
+
 # -------------------------------
 # Streamlit UI
 # -------------------------------
@@ -512,83 +440,52 @@ st.caption("By: **Mohamed Almehayla**")
 if "busy" not in st.session_state:
     st.session_state["busy"] = False
 
+# Initialize session-only key store (never written to disk/env)
+if "openai_api_key" not in st.session_state:
+    st.session_state["openai_api_key"] = ""
+
 def default_words(platform: str, content_type: str) -> int:
     return RECOMMENDED_WORDS.get(content_type, {}).get(platform, 30)
 
 with st.sidebar:
     st.header("Inputs")
 
-    # ---- Resolve a non-user key only when running locally ----
-    auto_key, auto_source = resolve_openai_key_local_first()
-
     use_openai = st.toggle(
         "Use OpenAI (paid)",
         value=False,
-        help=("Enable to use OpenAI GPT models. When OFF, the app uses your local Ollama model. "
-              "On Streamlit Cloud you must paste your own API key below."),
+        help="Enable to use OpenAI GPT models. When OFF, the app uses your local Ollama model.",
         key="use_openai",
     )
 
-    # On CLOUD: only accept user input (no secrets/env), do not store anywhere persistent.
-    # On LOCAL: allow secrets/env fallback if user leaves this blank.
+    # --- Session-only API key input ---
+    st.markdown("**OpenAI API Key (session-only)**")
     user_key = st.text_input(
-        "OpenAI API Key",
+        "Paste your key",
         type="password",
-        help=("Your key is used in-memory for this session only. "
-              "On Cloud we do not read secrets/env and we do not write your key to env or cache."),
-        key="openai_key_input",
+        placeholder="sk-...",
+        help="Stored only in this browser session (st.session_state). Not saved to secrets, env vars, or disk.",
+        key="openai_key_input_session",
     )
+    # Update session state when user types
+    if user_key is not None:
+        st.session_state["openai_api_key"] = user_key.strip()
 
-    # Effective key selection
-    if IS_CLOUD:
-        # Cloud = force user input only
-        effective_openai_key = user_key.strip()
-        effective_source = "cloud:user_input_only"
-    else:
-        # Local = user > secrets/env
-        effective_openai_key = (user_key.strip() if user_key and user_key.strip() else auto_key).strip()
-        effective_source = "user_input" if (user_key and user_key.strip()) else auto_source
+    # Convenience actions
+    cols = st.columns(2)
+    with cols[0]:
+        if st.button("Clear key"):
+            st.session_state["openai_api_key"] = ""
+            st.success("Session key cleared.")
+    with cols[1]:
+        st.caption(f"Current: {_mask_key(st.session_state['openai_api_key'])}")
 
-        # Keep environment in sync LOCALLY for libs that read from env (not on cloud)
-        if effective_openai_key:
-            os.environ["OPENAI_API_KEY"] = effective_openai_key
+    # No diagnostics that touch secrets or env; we keep it session-only.
 
-    # Diagnostics (masked). On Cloud, we keep this minimal and never show auto_source.
-    with st.expander("🔎 Key diagnostics (safe to share)"):
-        if IS_CLOUD:
-            st.write({
-                "deployment": "cloud",
-                "user_key_provided": bool(user_key.strip()),
-                "effective_key_masked": _mask_key(effective_openai_key),
-                "env_OPENAI_API_KEY_present": False,  # never set on cloud
-            })
-            st.caption("On Cloud, only user-entered keys are used in-memory for this session.")
-        else:
-            st.write({
-                "deployment": "local",
-                "auto_source": effective_source,
-                "auto_key_masked": _mask_key(auto_key),
-                "user_override_provided": bool(user_key.strip()),
-                "effective_key_masked": _mask_key(effective_openai_key),
-                "env_OPENAI_API_KEY_present": bool(os.getenv("OPENAI_API_KEY")),
-            })
-            st.caption("Locally you may use .streamlit/secrets.toml or OPENAI_API_KEY env var.")
-
-    # Optional: Quick action to forget the key from session (Cloud-friendly)
-    if st.button("🧹 Forget API key (this session)"):
-        # Clear both widget and any session echo
-        st.session_state["openai_key_input"] = ""
-        # Do NOT clear env here; we never set it on Cloud, and locally user may have env/secrets.
-        st.success("Key cleared from this session state.")
-
-    if use_openai and not effective_openai_key:
-        if IS_CLOUD:
-            st.info("Please paste your OpenAI API key above to use OpenAI on Streamlit Cloud.")
-        else:
-            st.info(
-                "No OpenAI API key detected. Add it via `.streamlit/secrets.toml`, "
-                "set `OPENAI_API_KEY` in your environment, or paste it above."
-            )
+    if use_openai and not st.session_state["openai_api_key"]:
+        st.info(
+            "No OpenAI API key detected. Paste your key above. "
+            "You can create a key from your OpenAI account."
+        )
 
     # Common inputs
     description = st.text_area(
@@ -614,10 +511,7 @@ with st.sidebar:
     st.caption(f"Recommended for {platform} ({content_type.lower()}): ~{rec_target} words. (App enforces 80–100% range.)")
 
     if use_openai:
-        # Only try to list models if we have a key (user-provided on Cloud; user/secrets/env on Local).
-        openai_models = fetch_openai_chat_models(effective_openai_key) if effective_openai_key else [
-            m for m in FALLBACK_OPENAI_MODELS if not m.lower().startswith("gpt-5")
-        ]
+        openai_models = fetch_openai_chat_models(st.session_state["openai_api_key"])
         preferred = "gpt-4o-mini" if "gpt-4o-mini" in openai_models else openai_models[0]
         openai_model = st.selectbox(
             "OpenAI model",
@@ -679,9 +573,8 @@ with st.sidebar:
 
 st.markdown("> Tips: Twitter/X is char-limited (we'll truncate if needed). The app enforces an 80–100% word range (except the X 280-char limit).")
 
-# -------------------------------
+
 # Copy button helper
-# -------------------------------
 def render_copy_button(text: str, key: str):
     escaped = json.dumps(text)
     html = f"""
@@ -709,19 +602,17 @@ def render_copy_button(text: str, key: str):
     """
     components.html(html, height=48)
 
-# -------------------------------
-# Caching
-# -------------------------------
-# IMPORTANT:
-# - We ONLY cache the OLLAMA path.
-# - We NEVER cache OpenAI generations on CLOUD to avoid accidental persistence of request context.
-# - Locally, we also avoid passing the API key into any cached function signature.
 
+# -------------------------------
+# Cache (Ollama only)
+# -------------------------------
 @st.cache_data(show_spinner=False, ttl=300)
 def cached_generate_ollama(description: str, platform: str, tone: str,
                            content_type: str, word_target: int,
-                           ollama_base: str, ollama_model: str,
-                           connect_timeout: int, read_timeout: int):
+                           ollama_base: Optional[str],
+                           ollama_model: Optional[str],
+                           connect_timeout: Optional[int],
+                           read_timeout: Optional[int]):
     return generate_captions_ollama(
         description, platform, tone, content_type, word_target,
         base_url=ollama_base or "http://localhost:11434",
@@ -730,12 +621,6 @@ def cached_generate_ollama(description: str, platform: str, tone: str,
         read_timeout=read_timeout or 300,
     )
 
-def generate_openai_nocache(api_key: str, description: str, platform: str, tone: str,
-                            content_type: str, word_target: int, model: str):
-    # Explicitly NON-cached path (both Cloud and Local) to keep keys out of cache.
-    return generate_captions_openai(
-        api_key, description, platform, tone, content_type, word_target, model=model
-    )
 
 # -------------------------------
 # Main action
@@ -746,9 +631,9 @@ if generate_clicked:
     else:
         provider = "openai" if st.session_state["use_openai"] else "ollama"
 
-        # Final gate for key
-        if provider == "openai" and not effective_openai_key:
-            st.error("Please paste your OpenAI API key above.")
+        # KEY CHECK RIGHT BEFORE CALL (final gate)
+        if provider == "openai" and not st.session_state["openai_api_key"]:
+            st.error("Please paste your OpenAI API key in the sidebar. It will only be kept for this session.")
         else:
             if st.session_state["busy"]:
                 st.stop()
@@ -759,33 +644,27 @@ if generate_clicked:
                         caps, warns = cached_generate_ollama(
                             description.strip(), platform, tone,
                             content_type, int(st.session_state["word_target"]),
-                            ollama_base or "http://localhost:11434",
-                            ollama_model or DEFAULT_OLLAMA_MODEL,
-                            connect_timeout or 10, read_timeout or 300
+                            ollama_base, ollama_model,
+                            connect_timeout, read_timeout
                         )
                     else:
-                        # OPENAI path: never cached on Cloud; also not cached locally to avoid key in cache.
-                        caps, warns = generate_openai_nocache(
-                            effective_openai_key,
+                        # OpenAI path is NOT cached to avoid keys being hashed in cache metadata
+                        caps, warns = generate_captions_openai(
+                            st.session_state["openai_api_key"],
                             description.strip(), platform, tone,
                             content_type, int(st.session_state["word_target"]),
-                            openai_model or "gpt-4o-mini"
+                            model=openai_model or "gpt-4o-mini"
                         )
+
             except RuntimeError as e:
-                # If Ollama fails and we do have a key, fall back to OpenAI.
-                if (provider == "ollama") and effective_openai_key:
+                if (provider == "ollama") and st.session_state["openai_api_key"]:
                     st.warning(f"{e}  • Falling back to OpenAI…")
-                    try:
-                        caps, warns = generate_openai_nocache(
-                            effective_openai_key,
-                            description.strip(), platform, tone,
-                            content_type, int(st.session_state["word_target"]),
-                            "gpt-4o-mini"
-                        )
-                    except Exception as e2:
-                        st.error(str(e2))
-                        st.session_state["busy"] = False
-                        st.stop()
+                    caps, warns = generate_captions_openai(
+                        st.session_state["openai_api_key"],
+                        description.strip(), platform, tone,
+                        content_type, int(st.session_state["word_target"]),
+                        model="gpt-4o-mini"
+                    )
                 else:
                     st.error(str(e))
                     st.session_state["busy"] = False
@@ -843,8 +722,9 @@ if generate_clicked:
 with st.sidebar:
     st.caption(
         "Default provider: Ollama (local). Toggle 'Use OpenAI (paid)' to switch. "
+        "Your OpenAI key is kept only in this session (not saved to secrets/env/disk). "
         "App enforces an 80–100% word range (except X’s 280-char limit). "
         "Use Refresh to update local model list; Pull to install new models. "
-        "On Streamlit Cloud, only user-entered OpenAI keys are used, held in memory for this session only. "
+        "Only OpenAI will work for Streamlit Community Cloud. "
         "Built by **Mohamed Almehayla**"
     )
