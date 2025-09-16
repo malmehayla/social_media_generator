@@ -113,14 +113,14 @@ cd social_media_generator
 
 ### 2. Create & activate Conda environment
 
-**Option A (recommended) — `environment.yml`**
+**Option A (recommended) - `environment.yml`**
 
 ```bash
 conda env create -f environment.yml
 conda activate smg
 ```
 
-**Option B — manual**
+**Option B - manual**
 
 ```bash
 conda create -n smg python=3.10 -y
